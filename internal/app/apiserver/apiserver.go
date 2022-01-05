@@ -2,11 +2,14 @@ package apiserver
 
 // APIServer - структура для сервера
 type APIServer struct {
+	config *Config
 }
 
 // New создает экземпляр сервера
-func New() *APIServer {
-	return &APIServer{}
+func New(config *Config) *APIServer {
+	return &APIServer{
+		config: config,
+	}
 }
 
 // Start запускает сервер
