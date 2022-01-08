@@ -1,38 +1,40 @@
-package store_test
+package teststore_test
 
 import (
 	"github.com/stretchr/testify/assert"
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/model"
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/store"
+	"github.com/ziyadovea/golang-http-rest-api/internal/app/store/teststore"
 	"testing"
 )
 
 // TestUserRepository_Create тестирует создание нового пользователя
 func TestUserRepository_Create(t *testing.T) {
-	st, tearDown := store.TestStore(t, databaseURL)
-	defer tearDown("users")
-
-	err := st.User().Create(model.TestUser(t))
-	assert.NoError(t, err)
+	store := teststore.New()
+	repo := store.User()
+	error := repo.Create(model.TestUser(t))
+	assert.NoError(t, error)
 }
 
 // TestUserRepository_FindByEmail тестирует поиск пользователя по email
 func TestUserRepository_FindByEmail(t *testing.T) {
-	st, tearDown := store.TestStore(t, databaseURL)
-	defer tearDown("users")
 
-	user := model.TestUser(t)
-	user.Email = "user1@example.com"
-	err := st.User().Create(user)
-	assert.NoError(t, err)
+	st := teststore.New()
+	repo := st.User()
+	u := model.TestUser(t)
+	u.Email = "user1@example.com"
+	error := repo.Create(u)
+	assert.NoError(t, error)
 
 	// 1-ый кейс - ищем пользователя, которого нет
-	u, err := st.User().FindByEmail("user2@example.com")
+	user, err := repo.FindByEmail("user2@example.com")
 	assert.Error(t, err)
-	assert.Nil(t, u)
+	assert.EqualError(t, err, store.ErrUserNotFound.Error())
+	assert.Nil(t, user)
 
 	// 2-ой кейс - ищем существующего пользователя, все ок
-	u, err = st.User().FindByEmail("user1@example.com")
+	user, err = repo.FindByEmail("user1@example.com")
 	assert.NoError(t, err)
-	assert.NotNil(t, u)
+	assert.NotNil(t, user)
+
 }

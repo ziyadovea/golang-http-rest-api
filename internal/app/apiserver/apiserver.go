@@ -1,73 +1,40 @@
 package apiserver
 
 import (
-	"github.com/gorilla/mux"
-	"github.com/sirupsen/logrus"
-	"github.com/ziyadovea/golang-http-rest-api/internal/app/store"
-	"io"
+	"context"
+	"github.com/jackc/pgx/v4"
+	"github.com/ziyadovea/golang-http-rest-api/internal/app/store/sqlstore"
 	"net/http"
 )
 
-// APIServer - структура для сервера
-type APIServer struct {
-	config *Config
-	logger *logrus.Logger
-	router *mux.Router
-	Store  *store.Store
-}
-
-// New создает экземпляр сервера
-func New(config *Config) *APIServer {
-	return &APIServer{
-		config: config,
-		logger: logrus.New(),
-		router: mux.NewRouter(),
-	}
-}
-
 // Start запускает сервер
-func (s *APIServer) Start() error {
+func Start(config *Config) error {
 
-	if err := s.configureLogger(); err != nil {
-		return err
-	}
-	s.configureRouter()
-	if err := s.configureStore(); err != nil {
-		return err
-	}
-
-	s.logger.Info("starting api server")
-	return http.ListenAndServe(s.config.Port, s.router)
-
-}
-
-// configureLogger задает конфигурацию для логгера
-func (s *APIServer) configureLogger() error {
-	lvl, err := logrus.ParseLevel(s.config.LogLevel)
+	conn, err := connectDB(config.DatabaseURL)
+	defer conn.Close(context.Background())
 	if err != nil {
 		return err
 	}
-	s.logger.SetLevel(lvl)
-	return nil
+
+	store := sqlstore.New(conn)
+
+	server := newServer(store)
+	server.configureLogger(config)
+	server.configureRouter()
+
+	server.logger.Info("запущен сервер на порту " + config.Port)
+	return http.ListenAndServe(config.Port, server)
+
 }
 
-// configureRouter задает конфигурацию для роутера
-func (s *APIServer) configureRouter() {
-	s.router.HandleFunc("/hello", s.handleHello())
-}
-
-// configureStore задает конфигурация для БД
-func (s *APIServer) configureStore() error {
-	st := store.New(s.config.StoreConfig)
-	if err := st.Open(); err != nil {
-		return err
+// connectDB коннектиться с БД
+func connectDB(connString string) (*pgx.Conn, error) {
+	conn, err := pgx.Connect(context.Background(), connString)
+	if err != nil {
+		return nil, err
 	}
-	s.Store = st
-	return nil
-}
-
-func (s *APIServer) handleHello() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "Hello!")
+	if err := conn.Ping(context.Background()); err != nil {
+		return nil, err
 	}
+	return conn, nil
 }

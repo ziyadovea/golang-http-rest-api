@@ -1,12 +1,10 @@
 package apiserver
 
-import "github.com/ziyadovea/golang-http-rest-api/internal/app/store"
-
 // Config - структура для конфига приложения
 type Config struct {
-	Port        string        `json:"port"`
-	LogLevel    string        `json:"log_level"`
-	StoreConfig *store.Config `json:"store_config"`
+	Port        string `json:"port"`
+	LogLevel    string `json:"log_level"`
+	DatabaseURL string `json:"database_url"`
 }
 
 // NewConfig создает новый конфиг
@@ -14,6 +12,6 @@ func NewConfig() *Config {
 	return &Config{
 		Port:        ":8080",
 		LogLevel:    "debug",
-		StoreConfig: store.NewConfig(),
+		DatabaseURL: "postgres://postgres:0000@localhost:5432/users_go_restapi",
 	}
 }

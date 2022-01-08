@@ -1,8 +1,5 @@
 {
   "port": ":8080",
   "log_level": "debug",
-
-  "store_config": {
-    "database_url": "postgres://postgres:0000@localhost:5432/users_go_restapi"
-  }
+  "database_url": "postgres://postgres:0000@localhost:5432/users_go_restapi"
 }
