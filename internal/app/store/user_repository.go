@@ -12,6 +12,11 @@ type UserRepository struct {
 
 // Create создает пользователя
 func (r *UserRepository) Create(u *model.User) error {
+
+	if err := u.Validate(); err != nil {
+		return err
+	}
+
 	row := r.store.connection.QueryRow(
 		context.Background(),
 		"insert into users (email, encrypted_password) values ($1, $2) returning id",

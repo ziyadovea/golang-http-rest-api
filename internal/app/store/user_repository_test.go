@@ -12,11 +12,7 @@ func TestUserRepository_Create(t *testing.T) {
 	st, tearDown := store.TestStore(t, databaseURL)
 	defer tearDown("users")
 
-	err := st.User().Create(&model.User{
-		ID:                0,
-		Email:             "user1@example.com",
-		EncryptedPassword: "",
-	})
+	err := st.User().Create(model.TestUser(t))
 	assert.NoError(t, err)
 }
 
@@ -25,11 +21,9 @@ func TestUserRepository_FindByEmail(t *testing.T) {
 	st, tearDown := store.TestStore(t, databaseURL)
 	defer tearDown("users")
 
-	err := st.User().Create(&model.User{
-		ID:                0,
-		Email:             "user1@example.com",
-		EncryptedPassword: "",
-	})
+	user := model.TestUser(t)
+	user.Email = "user1@example.com"
+	err := st.User().Create(user)
 	assert.NoError(t, err)
 
 	// 1-ый кейс - ищем пользователя, которого нет
