@@ -12,6 +12,6 @@ func NewConfig() *Config {
 	return &Config{
 		Port:        ":8080",
 		LogLevel:    "debug",
-		DatabaseURL: "postgres://postgres:0000@localhost:5432/users_go_restapi",
+		DatabaseURL: "postgres://postgres:0000@localhost:5432/go_restapi",
 	}
 }

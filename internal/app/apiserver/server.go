@@ -4,7 +4,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/store"
-	"io"
 	"net/http"
 )
 
@@ -32,7 +31,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // configureRouter задает конфигурацию для роутера
 func (s *server) configureRouter() {
-	s.router.HandleFunc("/hello", s.handleHello())
+
 }
 
 // configureLogger задает конфигурацию для логгера
@@ -43,10 +42,4 @@ func (s *server) configureLogger(config *Config) error {
 	}
 	s.logger.SetLevel(lvl)
 	return nil
-}
-
-func (s *server) handleHello() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "Hello!")
-	}
 }

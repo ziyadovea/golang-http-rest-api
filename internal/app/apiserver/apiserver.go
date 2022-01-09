@@ -11,10 +11,10 @@ import (
 func Start(config *Config) error {
 
 	conn, err := connectDB(config.DatabaseURL)
-	defer conn.Close(context.Background())
 	if err != nil {
 		return err
 	}
+	defer conn.Close(context.Background())
 
 	store := sqlstore.New(conn)
 
