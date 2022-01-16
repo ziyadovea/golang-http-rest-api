@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"context"
+	"github.com/gorilla/sessions"
 	"github.com/jackc/pgx/v4"
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/store/sqlstore"
 	"net/http"
@@ -18,7 +19,8 @@ func Start(config *Config) error {
 
 	store := sqlstore.New(conn)
 
-	server := newServer(store)
+	sessionStore := sessions.NewCookieStore([]byte(config.SessionKey))
+	server := newServer(store, sessionStore)
 	server.configureLogger(config)
 	server.configureRouter()
 

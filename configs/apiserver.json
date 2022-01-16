@@ -1,5 +1,6 @@
 {
   "port": ":8080",
   "log_level": "debug",
-  "database_url": "postgres://postgres:0000@localhost:5432/go_restapi"
+  "database_url": "postgres://postgres:0000@localhost:5432/go_restapi",
+  "session_key": "a4824ad13131e5b88baa1bd7ec583416ab5a75835b69b254bad814bc496e220bed1ef54471ee721c7c2140229672b21e52e456d3904b4c16b2a80ccbb528439a"
 }

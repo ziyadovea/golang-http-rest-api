@@ -2,7 +2,9 @@ package apiserver
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/sessions"
 	"github.com/sirupsen/logrus"
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/model"
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/store"
@@ -10,19 +12,29 @@ import (
 	"net/http"
 )
 
+const (
+	sessionName = "session-name"
+)
+
+var (
+	errorIncorrectEmailOrPassword = errors.New("неправильный email или пароль")
+)
+
 // server - структура для сервера (внутренние методы)
 type server struct {
-	router *mux.Router
-	logger *logrus.Logger
-	store  store.Store
+	router       *mux.Router
+	logger       *logrus.Logger
+	store        store.Store
+	sessionStore sessions.Store
 }
 
 // newServer создает экземпляр сервера
-func newServer(store store.Store) *server {
+func newServer(store store.Store, sessionsStore sessions.Store) *server {
 	s := &server{
-		router: mux.NewRouter(),
-		logger: logrus.New(),
-		store:  store,
+		router:       mux.NewRouter(),
+		logger:       logrus.New(),
+		store:        store,
+		sessionStore: sessionsStore,
 	}
 	return s
 }
@@ -34,7 +46,8 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // configureRouter задает конфигурацию для роутера
 func (s *server) configureRouter() {
-	s.router.HandleFunc("/users", s.handlerUsersCreate())
+	s.router.HandleFunc("/users", s.handlerUsersCreate()).Methods("POST")
+	s.router.HandleFunc("/sessions", s.handlerSessionsCreate()).Methods("POST")
 }
 
 // configureLogger задает конфигурацию для логгера
@@ -47,7 +60,7 @@ func (s *server) configureLogger(config *Config) error {
 	return nil
 }
 
-// handlerUsersCreate handler для эндпоинта "/users", создает нового юзера
+// handlerUsersCreate - регистрация. обработчик "/users"
 func (s *server) handlerUsersCreate() http.HandlerFunc {
 
 	type request struct {
@@ -57,11 +70,11 @@ func (s *server) handlerUsersCreate() http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		s.logger.Info("обработка эндпоинта /users")
+		s.logger.Info("/users")
 
 		req := &request{}
 		if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-			s.logger.Error("некорректный формат запроса")
+			s.logger.Error("некорректный формат запроса: " + err.Error())
 			s.error(w, r, http.StatusBadRequest, err)
 			return
 		}
@@ -87,6 +100,52 @@ func (s *server) handlerUsersCreate() http.HandlerFunc {
 
 		s.logger.Info("новый пользователь успешно создан, email = " + u.Email)
 		s.respond(w, r, http.StatusCreated, u)
+	}
+
+}
+
+// handlerSessionsCreate - авторизация. обработчик "/sessions"
+func (s *server) handlerSessionsCreate() http.HandlerFunc {
+
+	type request struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		s.logger.Info("/sessions")
+
+		req := &request{}
+		if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+			s.logger.Error("некорректный формат запроса: " + err.Error())
+			s.error(w, r, http.StatusBadRequest, err)
+			return
+		}
+		defer r.Body.Close()
+
+		u, err := s.store.User().FindByEmail(req.Email)
+		if err != nil || !u.ComparePassword(req.Password) {
+			s.logger.Error("неправильный логин или пароль")
+			s.error(w, r, http.StatusUnauthorized, errorIncorrectEmailOrPassword)
+			return
+		}
+
+		session, err := s.sessionStore.Get(r, sessionName)
+		if err != nil {
+			s.logger.Error("проблема при создании сессии: " + err.Error())
+			s.error(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		session.Values["user_id"] = u.ID
+		if err = s.sessionStore.Save(r, w, session); err != nil {
+			s.logger.Error("проблема при сохранении сессии: " + err.Error())
+			s.error(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		s.logger.Info("пользователь успешно прошел аутентификацию, email = " + u.Email)
+		s.respond(w, r, http.StatusOK, nil)
 	}
 
 }

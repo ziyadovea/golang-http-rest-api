@@ -5,6 +5,7 @@ type Config struct {
 	Port        string `json:"port"`
 	LogLevel    string `json:"log_level"`
 	DatabaseURL string `json:"database_url"`
+	SessionKey  string `json:"session_key"`
 }
 
 // NewConfig создает новый конфиг

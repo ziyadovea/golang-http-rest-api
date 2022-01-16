@@ -1,6 +1,9 @@
 package model
 
-import "github.com/go-playground/validator/v10"
+import (
+	"github.com/go-playground/validator/v10"
+	"golang.org/x/crypto/bcrypt"
+)
 
 // User - структура пользователя в БД
 type User struct {
@@ -15,4 +18,9 @@ var validate *validator.Validate
 func (u *User) Validate() error {
 	validate = validator.New()
 	return validate.Struct(u)
+}
+
+// ComparePassword сравнивает пароли
+func (u *User) ComparePassword(password string) bool {
+	return bcrypt.CompareHashAndPassword([]byte(u.EncryptedPassword), []byte(password)) == nil
 }
