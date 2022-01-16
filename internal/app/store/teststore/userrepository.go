@@ -1,6 +1,7 @@
 package teststore
 
 import (
+	"errors"
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/model"
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/store"
 )
@@ -15,6 +16,9 @@ type UserRepository struct {
 func (r *UserRepository) Create(u *model.User) error {
 	if err := u.Validate(); err != nil {
 		return err
+	}
+	if _, isExist := r.users[u.Email]; isExist {
+		return errors.New("пользователь с таким email уже существует")
 	}
 	r.users[u.Email] = u
 	u.ID = len(r.users)
