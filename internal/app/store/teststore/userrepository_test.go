@@ -16,6 +16,28 @@ func TestUserRepository_Create(t *testing.T) {
 	assert.NoError(t, error)
 }
 
+// TestUserRepository_FindByID тестирует поиск пользователя по email
+func TestUserRepository_FindByID(t *testing.T) {
+
+	st := teststore.New()
+	repo := st.User()
+	u := model.TestUser(t)
+	error := repo.Create(u)
+	assert.NoError(t, error)
+
+	// 1-ый кейс - ищем пользователя, которого нет
+	user, err := repo.FindByID(1000)
+	assert.Error(t, err)
+	assert.EqualError(t, err, store.ErrUserNotFound.Error())
+	assert.Nil(t, user)
+
+	// 2-ой кейс - ищем существующего пользователя, все ок
+	user, err = repo.FindByID(u.ID)
+	assert.NoError(t, err)
+	assert.NotNil(t, user)
+
+}
+
 // TestUserRepository_FindByEmail тестирует поиск пользователя по email
 func TestUserRepository_FindByEmail(t *testing.T) {
 
@@ -33,7 +55,7 @@ func TestUserRepository_FindByEmail(t *testing.T) {
 	assert.Nil(t, user)
 
 	// 2-ой кейс - ищем существующего пользователя, все ок
-	user, err = repo.FindByEmail("user1@example.com")
+	user, err = repo.FindByEmail(u.Email)
 	assert.NoError(t, err)
 	assert.NotNil(t, user)
 

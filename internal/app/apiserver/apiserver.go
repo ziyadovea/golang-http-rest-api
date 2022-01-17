@@ -24,7 +24,7 @@ func Start(config *Config) error {
 	server.configureLogger(config)
 	server.configureRouter()
 
-	server.logger.Info("запущен сервер на порту " + config.Port)
+	server.logger.Info("starting server on port " + config.Port)
 	return http.ListenAndServe(config.Port, server)
 
 }

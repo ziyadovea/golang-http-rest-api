@@ -9,7 +9,7 @@ import (
 // UserRepository - структура для репозитория для БД
 type UserRepository struct {
 	store *Store
-	users map[string]*model.User
+	users map[int]*model.User
 }
 
 // Create создает пользователя
@@ -17,18 +17,28 @@ func (r *UserRepository) Create(u *model.User) error {
 	if err := u.Validate(); err != nil {
 		return err
 	}
-	if _, isExist := r.users[u.Email]; isExist {
-		return errors.New("пользователь с таким email уже существует")
+	u.ID = len(r.users) + 1
+	if _, isExist := r.users[u.ID]; isExist {
+		return errors.New("пользователь с таким ID уже существует")
 	}
-	r.users[u.Email] = u
-	u.ID = len(r.users)
+	r.users[u.ID] = u
 	return nil
+}
+
+// FindByID ищет пользователя по email
+func (r *UserRepository) FindByID(ID int) (*model.User, error) {
+	if u, isExist := r.users[ID]; isExist {
+		return u, nil
+	}
+	return nil, store.ErrUserNotFound
 }
 
 // FindByEmail ищет пользователя по email
 func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
-	if u, ok := r.users[email]; ok {
-		return u, nil
+	for _, v := range r.users {
+		if v.Email == email {
+			return v, nil
+		}
 	}
 	return nil, store.ErrUserNotFound
 }

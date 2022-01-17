@@ -26,6 +26,24 @@ func (r *UserRepository) Create(u *model.User) error {
 	).Scan(&u.ID)
 }
 
+// FindByID ищет пользователя по email
+func (r *UserRepository) FindByID(ID int) (*model.User, error) {
+	row := r.store.connection.QueryRow(
+		context.Background(),
+		"select * from users where id=$1",
+		ID,
+	)
+	user := &model.User{}
+	err := row.Scan(&user.ID, &user.Email, &user.EncryptedPassword)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, store.ErrUserNotFound
+		}
+		return nil, err
+	}
+	return user, nil
+}
+
 // FindByEmail ищет пользователя по email
 func (r *UserRepository) FindByEmail(email string) (*model.User, error) {
 	row := r.store.connection.QueryRow(

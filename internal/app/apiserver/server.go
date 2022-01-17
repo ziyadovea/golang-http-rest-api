@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/gorilla/mux"
@@ -13,12 +14,17 @@ import (
 )
 
 const (
-	sessionName = "session-name"
+	sessionName            = "session-name"
+	ctxKeyUser  contextKey = iota
 )
 
 var (
 	errorIncorrectEmailOrPassword = errors.New("неправильный email или пароль")
+	errorNotAuth                  = errors.New("пользователь не аутентифицирован")
 )
+
+// ключ для контекста
+type contextKey int
 
 // server - структура для сервера (внутренние методы)
 type server struct {
@@ -48,6 +54,37 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *server) configureRouter() {
 	s.router.HandleFunc("/users", s.handlerUsersCreate()).Methods("POST")
 	s.router.HandleFunc("/sessions", s.handlerSessionsCreate()).Methods("POST")
+	s.router.HandleFunc("/logout", s.handleLogoutUser()).Methods("POST")
+
+	private := s.router.PathPrefix("/private").Subrouter()
+	private.Use(s.middlewareAuthUser)
+	private.HandleFunc("/whoami", s.handleWhoami()).Methods("GET")
+}
+
+// authUser - middleware для аутентификации пользователя
+func (s *server) middlewareAuthUser(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		session, err := s.sessionStore.Get(r, sessionName)
+		if err != nil {
+			s.error(w, r, http.StatusInternalServerError, err)
+			return
+		}
+
+		userID, isExist := session.Values["user_id"]
+		if !isExist {
+			s.error(w, r, http.StatusUnauthorized, errorNotAuth)
+			return
+		}
+
+		user, err := s.store.User().FindByID(userID.(int))
+		if err != nil {
+			s.error(w, r, http.StatusUnauthorized, errorNotAuth)
+			return
+		}
+
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyUser, user)))
+	})
 }
 
 // configureLogger задает конфигурацию для логгера
@@ -70,11 +107,8 @@ func (s *server) handlerUsersCreate() http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		s.logger.Info("/users")
-
 		req := &request{}
 		if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-			s.logger.Error("некорректный формат запроса: " + err.Error())
 			s.error(w, r, http.StatusBadRequest, err)
 			return
 		}
@@ -83,7 +117,6 @@ func (s *server) handlerUsersCreate() http.HandlerFunc {
 		// хешируем пароль
 		hashBytes, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			s.logger.Error("ошибка при хешировании пароля: " + err.Error())
 			s.error(w, r, http.StatusUnprocessableEntity, err)
 			return
 		}
@@ -93,18 +126,16 @@ func (s *server) handlerUsersCreate() http.HandlerFunc {
 			EncryptedPassword: string(hashBytes),
 		}
 		if err := s.store.User().Create(u); err != nil {
-			s.logger.Error("ошибка при создании пользователя: " + err.Error())
 			s.error(w, r, http.StatusUnprocessableEntity, err)
 			return
 		}
 
-		s.logger.Info("новый пользователь успешно создан, email = " + u.Email)
 		s.respond(w, r, http.StatusCreated, u)
 	}
 
 }
 
-// handlerSessionsCreate - авторизация. обработчик "/sessions"
+// handlerSessionsCreate - аутентификация. обработчик "/sessions"
 func (s *server) handlerSessionsCreate() http.HandlerFunc {
 
 	type request struct {
@@ -114,11 +145,8 @@ func (s *server) handlerSessionsCreate() http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 
-		s.logger.Info("/sessions")
-
 		req := &request{}
 		if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-			s.logger.Error("некорректный формат запроса: " + err.Error())
 			s.error(w, r, http.StatusBadRequest, err)
 			return
 		}
@@ -126,28 +154,53 @@ func (s *server) handlerSessionsCreate() http.HandlerFunc {
 
 		u, err := s.store.User().FindByEmail(req.Email)
 		if err != nil || !u.ComparePassword(req.Password) {
-			s.logger.Error("неправильный логин или пароль")
 			s.error(w, r, http.StatusUnauthorized, errorIncorrectEmailOrPassword)
 			return
 		}
 
 		session, err := s.sessionStore.Get(r, sessionName)
 		if err != nil {
-			s.logger.Error("проблема при создании сессии: " + err.Error())
 			s.error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		session.Values["user_id"] = u.ID
 		if err = s.sessionStore.Save(r, w, session); err != nil {
-			s.logger.Error("проблема при сохранении сессии: " + err.Error())
 			s.error(w, r, http.StatusInternalServerError, err)
 			return
 		}
 
-		s.logger.Info("пользователь успешно прошел аутентификацию, email = " + u.Email)
-		s.respond(w, r, http.StatusOK, nil)
+		s.respond(w, r, http.StatusOK, map[string]string{
+			"msg": "пользователь успешно аутентифицирован",
+		})
 	}
 
+}
+
+// handleLogoutUser реализует выход пользователя из системы
+func (s *server) handleLogoutUser() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		session, err := s.sessionStore.Get(r, sessionName)
+		if err != nil {
+			s.error(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		session.Values["user_id"] = -1
+		if err = s.sessionStore.Save(r, w, session); err != nil {
+			s.error(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		s.respond(w, r, http.StatusFound, map[string]string{
+			"msg": "пользователь успешно вышел из аккаунта",
+		})
+		http.Redirect(w, r, "/", http.StatusFound)
+	}
+}
+
+// handleWhoami - функция, которая выдает, что за пользователь сейчас авторизован в системе. "/secret/whoami"
+func (s *server) handleWhoami() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.respond(w, r, http.StatusOK, r.Context().Value(ctxKeyUser).(*model.User))
+	}
 }
 
 // error - функция-хелпер для обработки ошибок
