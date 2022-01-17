@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/google/uuid"
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/sirupsen/logrus"
@@ -11,11 +13,13 @@ import (
 	"github.com/ziyadovea/golang-http-rest-api/internal/app/store"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
+	"time"
 )
 
 const (
 	sessionName            = "session-name"
 	ctxKeyUser  contextKey = iota
+	ctxKeyRequestID
 )
 
 var (
@@ -52,6 +56,10 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // configureRouter задает конфигурацию для роутера
 func (s *server) configureRouter() {
+	s.router.Use(s.middlewareSetRequestID)
+	s.router.Use(s.middlewareLogRequest)
+	s.router.Use(handlers.CORS(handlers.AllowedOrigins([]string{"*"})))
+
 	s.router.HandleFunc("/users", s.handlerUsersCreate()).Methods("POST")
 	s.router.HandleFunc("/sessions", s.handlerSessionsCreate()).Methods("POST")
 	s.router.HandleFunc("/logout", s.handleLogoutUser()).Methods("POST")
@@ -61,7 +69,45 @@ func (s *server) configureRouter() {
 	private.HandleFunc("/whoami", s.handleWhoami()).Methods("GET")
 }
 
-// authUser - middleware для аутентификации пользователя
+// middlewareLogRequest - middleware для логгирования каждого запроса
+func (s *server) middlewareLogRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger := s.logger.WithFields(logrus.Fields{
+			"remote_addr": r.RemoteAddr,
+			"request_id":  r.Context().Value(ctxKeyRequestID),
+		})
+		logger.Infof("started [%s] %s", r.Method, r.RequestURI)
+		start := time.Now()
+
+		rw := &responseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+		}
+		next.ServeHTTP(rw, r)
+
+		logger.Infof(
+			"completed with %d %s in %s",
+			rw.statusCode,
+			http.StatusText(rw.statusCode),
+			time.Now().Sub(start).String(),
+		)
+	})
+}
+
+// middlewareSetRequestID - middleware для назначения каждому запросу UUID (универсального уникального айди)
+func (s *server) middlewareSetRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id, err := uuid.NewUUID()
+		if err != nil {
+			s.error(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		w.Header().Set("X-Request-ID", id.String())
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), ctxKeyRequestID, id)))
+	})
+}
+
+// middlewareAuthUser - middleware для аутентификации пользователя
 func (s *server) middlewareAuthUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -192,7 +238,7 @@ func (s *server) handleLogoutUser() http.HandlerFunc {
 		s.respond(w, r, http.StatusFound, map[string]string{
 			"msg": "пользователь успешно вышел из аккаунта",
 		})
-		http.Redirect(w, r, "/", http.StatusFound)
+		http.Redirect(w, r, "/sessions", http.StatusFound)
 	}
 }
 
